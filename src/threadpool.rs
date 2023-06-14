@@ -118,12 +118,11 @@ where
         let (result_sender, res_receiver) = mpsc::channel();
         let job_data = JobData {
             job,
-            result_sender: result_sender.clone(),
+            result_sender: result_sender,
         };
 
         self.task_sender.as_ref().unwrap().send(job_data)?;
         Ok(Future {
-            result_sender: Some(result_sender),
             result_receiver: Some(res_receiver),
         })
     }
@@ -255,7 +254,6 @@ where
 
 impl<T> Drop for Future<T> {
     fn drop(&mut self) {
-        drop(self.result_sender.take());
         drop(self.result_receiver.take());
     }
 }

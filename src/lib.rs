@@ -21,7 +21,6 @@ enum WorkerStatus {
 }
 
 pub struct Future<T> {
-    result_sender: Option<mpsc::Sender<T>>,
     result_receiver: Option<mpsc::Receiver<T>>,
 }
 
