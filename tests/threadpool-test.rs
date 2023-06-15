@@ -10,5 +10,5 @@ fn test() {
             4
         })
         .unwrap();
-    assert_eq!(res.get_result(None).unwrap(), 4);
+    assert_eq!(res.get_result().unwrap(), 4);
 }

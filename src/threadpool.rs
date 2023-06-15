@@ -228,21 +228,25 @@ impl<T> Future<T>
 where
     T: Send + 'static,
 {
-    pub fn get_result(
+    pub fn get_result(&mut self) -> Result<T, Box<dyn std::error::Error>> {
+        if let Some(receiver) = self.result_receiver.take() {
+            let res = receiver.recv()?;
+            Ok(res)
+        } else {
+            Err(Box::new(Error::new(
+                ErrorKind::Other,
+                "Result is already taken.",
+            )))
+        }
+    }
+
+    pub fn get_result_timeout(
         &mut self,
-        timeout: Option<Duration>,
+        timeout: Duration,
     ) -> Result<T, Box<dyn std::error::Error>> {
         if let Some(receiver) = self.result_receiver.take() {
-            match timeout {
-                Some(timeout) => {
-                    let res = receiver.recv_timeout(timeout)?;
-                    Ok(res)
-                }
-                None => {
-                    let res = receiver.recv()?;
-                    Ok(res)
-                }
-            }
+            let res = receiver.recv_timeout(timeout)?;
+            Ok(res)
         } else {
             Err(Box::new(Error::new(
                 ErrorKind::Other,
