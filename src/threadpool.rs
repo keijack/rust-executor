@@ -1,12 +1,9 @@
+use super::error::*;
 use super::*;
 use std::{
     collections::HashMap,
-    io::{Error, ErrorKind},
     sync::{
-        atomic::{
-            AtomicUsize,
-            Ordering::{AcqRel, Relaxed},
-        },
+        atomic::{AtomicUsize, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -40,34 +37,31 @@ where
             );
         }
 
-        let worker_count = Arc::new(AtomicUsize::new(0));
+        let worker_count = Arc::new(AtomicUsize::new(init_size));
         let working_count = Arc::new(AtomicUsize::new(0));
 
         let workers = Arc::new(Mutex::new(workers));
         let ws = Arc::clone(&workers);
 
-        let wkingc = Arc::clone(&working_count);
         let wkc = Arc::clone(&worker_count);
+        let wkingc = Arc::clone(&working_count);
 
         let m_thread = thread::Builder::new()
             .name("thead-pool-cleaner".to_string())
             .spawn(move || loop {
                 match task_status_receiver.recv() {
-                    Ok(id) => match id.1 {
-                        WorkerStatus::Enter => {
-                            wkc.fetch_add(1, AcqRel);
+                    Ok(id) => {
+                        log::debug!("receive task[#{:?}] status: {:?}", id.0, id.1);
+                        match id.1 {
+                            WorkerStatus::ThreadExit => {
+                                drop(ws.lock().unwrap().remove(&id.0));
+                                wkc.fetch_sub(1, Ordering::Relaxed);
+                            }
+                            WorkerStatus::JobDone => {
+                                wkingc.fetch_sub(1, Ordering::Relaxed);
+                            }
                         }
-                        WorkerStatus::Exit => {
-                            drop(ws.lock().unwrap().remove(&id.0));
-                            wkc.fetch_sub(1, AcqRel);
-                        }
-                        WorkerStatus::Start => {
-                            wkingc.fetch_add(1, AcqRel);
-                        }
-                        WorkerStatus::End => {
-                            wkingc.fetch_sub(1, AcqRel);
-                        }
-                    },
+                    }
                     Err(_) => {
                         log::debug!("All sender is close, exit this thread.");
                         break;
@@ -89,21 +83,31 @@ where
         }
     }
 
-    pub fn execute<F>(&self, f: F) -> Result<Future<T>, Box<dyn std::error::Error>>
+    pub fn execute<F>(&self, f: F) -> Result<Future<T>, ExecutorError>
     where
         F: FnOnce() -> T + Send + 'static,
     {
-        let worker_count = self.worker_count.load(Relaxed);
-        let working_count = self.working_count.load(Relaxed);
+        let worker_count = self.worker_count.load(Ordering::Relaxed);
+        let working_count = self.working_count.load(Ordering::Relaxed);
+        log::debug!(
+            "workers {}, working {}, max: {}",
+            worker_count,
+            working_count,
+            self.max_size
+        );
         if working_count >= worker_count && working_count < self.max_size {
             let mut workers = self.workers.lock().unwrap();
-            let id = self.current_id.fetch_add(1, AcqRel);
+            let id = self.current_id.fetch_add(1, Ordering::Relaxed);
             let task_status_sender = match self.worker_status_sender.clone() {
                 Some(sender) => sender,
                 None => {
-                    return Err(Box::new(Error::new(ErrorKind::InvalidData, "")));
+                    return Err(ExecutorError::new(
+                        ErrorKind::PoolEnded,
+                        "This threadpool is already dropped.".to_string(),
+                    ));
                 }
             };
+            self.worker_count.fetch_add(1, Ordering::Relaxed);
             workers.insert(
                 id,
                 Worker::new(
@@ -114,6 +118,7 @@ where
                 ),
             );
         }
+        self.working_count.fetch_add(1, Ordering::Relaxed);
         let job = Box::new(f);
         let (result_sender, res_receiver) = mpsc::channel();
         let job_data = JobData {
@@ -121,10 +126,17 @@ where
             result_sender: result_sender,
         };
 
-        self.task_sender.as_ref().unwrap().send(job_data)?;
-        Ok(Future {
-            result_receiver: Some(res_receiver),
-        })
+        if let Ok(_) = self.task_sender.as_ref().unwrap().send(job_data) {
+            Ok(Future {
+                result_receiver: Some(res_receiver),
+            })
+        } else {
+            Err(ExecutorError::new(
+                ErrorKind::PoolEnded,
+                "Cannot send message to worker thread, This threadpool is already dropped."
+                    .to_string(),
+            ))
+        }
     }
 }
 
@@ -148,7 +160,6 @@ impl Worker {
         wait_time_out: Option<Duration>,
         task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
     ) {
-        task_status_sender.send((id, WorkerStatus::Enter)).unwrap();
         loop {
             let job = match task_receiver.lock() {
                 // Won't do job inside. Doing job here may cause the lock release after the job done.
@@ -176,16 +187,18 @@ impl Worker {
                     break;
                 }
             };
-            if let Err(_) = task_status_sender.send((id, WorkerStatus::Start)) {};
+
             let fun = job.job;
             let result_sender = job.result_sender;
             let res = fun();
             if let Err(_) = result_sender.send(res) {
                 log::debug!("Send result to Future error, receiver may close. ");
             };
-            if let Err(_) = task_status_sender.send((id, WorkerStatus::End)) {};
+            if let Err(_) = task_status_sender.send((id, WorkerStatus::JobDone)) {
+                log::debug!("Send worder staus error, receiver may close.");
+            };
         }
-        task_status_sender.send((id, WorkerStatus::Exit)).unwrap();
+        task_status_sender.send((id, WorkerStatus::ThreadExit)).unwrap();
     }
 
     fn new<T>(
@@ -228,30 +241,32 @@ impl<T> Future<T>
 where
     T: Send + 'static,
 {
-    pub fn get_result(&mut self) -> Result<T, Box<dyn std::error::Error>> {
+    pub fn get_result(&mut self) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
-            let res = receiver.recv()?;
-            Ok(res)
-        } else {
-            Err(Box::new(Error::new(
-                ErrorKind::Other,
-                "Result is already taken.",
+            receiver.recv().or(Err(ExecutorError::new(
+                ErrorKind::PoolEnded,
+                "Cannot send message to worker thread, This threadpool is already dropped."
+                    .to_string(),
             )))
+        } else {
+            Err(ExecutorError::new(
+                ErrorKind::ResultAlreadyTaken,
+                "Result is already taken.".to_string(),
+            ))
         }
     }
 
-    pub fn get_result_timeout(
-        &mut self,
-        timeout: Duration,
-    ) -> Result<T, Box<dyn std::error::Error>> {
+    pub fn get_result_timeout(&mut self, timeout: Duration) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
-            let res = receiver.recv_timeout(timeout)?;
-            Ok(res)
-        } else {
-            Err(Box::new(Error::new(
-                ErrorKind::Other,
-                "Result is already taken.",
+            receiver.recv_timeout(timeout).or(Err(ExecutorError::new(
+                ErrorKind::TimeOut,
+                "Receive result timeout.".to_string(),
             )))
+        } else {
+            Err(ExecutorError::new(
+                ErrorKind::ResultAlreadyTaken,
+                "Result is already taken.".to_string(),
+            ))
         }
     }
 }

@@ -4,6 +4,7 @@ use std::{
     thread,
 };
 
+pub mod error;
 mod threadpool;
 
 type Job<T> = Box<dyn FnOnce() -> T + Send + 'static>;
@@ -13,11 +14,10 @@ struct JobData<T> {
     pub result_sender: mpsc::Sender<T>,
 }
 
+#[derive(Debug)]
 enum WorkerStatus {
-    Enter,
-    Exit,
-    Start,
-    End,
+    JobDone,
+    ThreadExit,
 }
 
 pub struct Future<T> {
