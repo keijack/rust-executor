@@ -110,7 +110,7 @@ where
                     ));
                 }
                 Policy::CallerRuns => {
-                    log::debug!("Working tasks reach the max size. use policy {:?}, so run the task right now at this thread.", self.policy);
+                    log::debug!("Run the task right now at this thread.");
                     let (result_sender, res_receiver) = mpsc::channel();
                     let res = f();
                     if let Err(_) = result_sender.send(res) {};
