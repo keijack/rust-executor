@@ -14,7 +14,7 @@ impl<T> ThreadPool<T>
 where
     T: Send + 'static,
 {
-    pub fn new(init_size: usize, max_size: usize) -> ThreadPool<T> {
+    pub fn new(init_size: usize, max_size: usize, policy: Policy) -> ThreadPool<T> {
         assert!(init_size > 0);
         assert!(max_size > 0);
         assert!(max_size >= init_size);
@@ -80,6 +80,7 @@ where
             worker_status_sender: Some(task_status_sender),
             m_thread: Some(m_thread),
             max_size,
+            policy,
         }
     }
 
@@ -95,6 +96,30 @@ where
             working_count,
             self.max_size
         );
+        if working_count >= self.max_size {
+            log::debug!(
+                "Working tasks reach the max size. use policy {:?}",
+                self.policy
+            );
+            match self.policy {
+                Policy::WAIT => {}
+                Policy::Reject => {
+                    return Err(ExecutorError::new(
+                        ErrorKind::TaskRejected,
+                        "Working tasks reaches to the limit.".to_string(),
+                    ));
+                }
+                Policy::CallerRuns => {
+                    log::debug!("Working tasks reach the max size. use policy {:?}, so run the task right now at this thread.", self.policy);
+                    let (result_sender, res_receiver) = mpsc::channel();
+                    let res = f();
+                    if let Err(_) = result_sender.send(res) {};
+                    return Ok(Future {
+                        result_receiver: Some(res_receiver),
+                    });
+                }
+            };
+        }
         if working_count >= worker_count && working_count < self.max_size {
             let mut workers = self.workers.lock().unwrap();
             let id = self.current_id.fetch_add(1, Ordering::Relaxed);
@@ -198,7 +223,9 @@ impl Worker {
                 log::debug!("Send worder staus error, receiver may close.");
             };
         }
-        task_status_sender.send((id, WorkerStatus::ThreadExit)).unwrap();
+        task_status_sender
+            .send((id, WorkerStatus::ThreadExit))
+            .unwrap();
     }
 
     fn new<T>(

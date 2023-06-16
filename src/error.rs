@@ -5,6 +5,7 @@ pub enum ErrorKind {
     PoolEnded,
     ResultAlreadyTaken,
     TimeOut,
+    TaskRejected,
 }
 pub struct ExecutorError {
     kind: ErrorKind,

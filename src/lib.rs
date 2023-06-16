@@ -7,17 +7,11 @@ use std::{
 pub mod error;
 mod threadpool;
 
-type Job<T> = Box<dyn FnOnce() -> T + Send + 'static>;
-
-struct JobData<T> {
-    pub job: Job<T>,
-    pub result_sender: mpsc::Sender<T>,
-}
-
 #[derive(Debug)]
-enum WorkerStatus {
-    JobDone,
-    ThreadExit,
+pub enum Policy {
+    WAIT,
+    Reject,
+    CallerRuns,
 }
 
 pub struct Future<T> {
@@ -34,9 +28,23 @@ pub struct ThreadPool<T> {
     worker_status_sender: Option<mpsc::Sender<(usize, WorkerStatus)>>,
     m_thread: Option<thread::JoinHandle<()>>,
     max_size: usize,
+    policy: Policy,
 }
+
+type Job<T> = Box<dyn FnOnce() -> T + Send + 'static>;
 
 struct Worker {
     id: usize,
     thread: Option<thread::JoinHandle<()>>,
+}
+
+struct JobData<T> {
+    pub job: Job<T>,
+    pub result_sender: mpsc::Sender<T>,
+}
+
+#[derive(Debug)]
+enum WorkerStatus {
+    JobDone,
+    ThreadExit,
 }

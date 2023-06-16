@@ -5,7 +5,7 @@ mod common;
 #[test]
 fn test() {
     common::setup_log();
-    let pool = executor::ThreadPool::new(1, 3);
+    let pool = executor::ThreadPool::new(1, 3, executor::Policy::CallerRuns);
     let mut futures = VecDeque::new();
     let e = 10;
     for i in 0..e {
