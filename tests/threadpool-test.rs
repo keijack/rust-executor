@@ -5,7 +5,10 @@ mod common;
 #[test]
 fn test() {
     common::setup_log();
-    let pool = executor::ThreadPool::new(1, 3, executor::Policy::CallerRuns);
+    let pool = executor::Builder::new()
+        .maximum_pool_size(3)
+        .exeed_limit_policy(executor::ExceedLimitPolicy::CallerRuns)
+        .build();
     let mut futures = VecDeque::new();
     let e = 10;
     for i in 0..e {
@@ -19,7 +22,7 @@ fn test() {
             .unwrap();
 
         futures.push_back(res);
-        std::thread::sleep(Duration::from_secs(i/2));
+        std::thread::sleep(Duration::from_secs(i / 2));
     }
     for i in 0..e {
         let mut f = futures.pop_front().unwrap();

@@ -10,14 +10,57 @@ use std::{
     time::Duration,
 };
 
+impl Builder {
+    pub fn new() -> Builder {
+        Builder {
+            core_pool_size: None,
+            maximum_pool_size: None,
+            exeed_limit_policy: Some(ExceedLimitPolicy::WAIT),
+        }
+    }
+
+    pub fn core_pool_size(mut self, size: usize) -> Builder {
+        self.core_pool_size = Some(size);
+        self
+    }
+
+    pub fn maximum_pool_size(mut self, size: usize) -> Builder {
+        self.maximum_pool_size = Some(size);
+        self
+    }
+
+    pub fn exeed_limit_policy(mut self, policy: ExceedLimitPolicy) -> Builder {
+        self.exeed_limit_policy = Some(policy);
+        self
+    }
+
+    pub fn build<T>(self) -> ThreadPool<T>
+    where
+        T: Send + 'static,
+    {
+        let init_size = match self.core_pool_size {
+            Some(size) => size,
+            None => 0,
+        };
+        let max_size = match self.maximum_pool_size {
+            Some(size) => size,
+            None => usize::MAX,
+        };
+        let policy = match self.exeed_limit_policy {
+            Some(policy) => policy,
+            None => ExceedLimitPolicy::WAIT,
+        };
+        ThreadPool::new(init_size, max_size, policy)
+    }
+}
+
 impl<T> ThreadPool<T>
 where
     T: Send + 'static,
 {
-    pub fn new(init_size: usize, max_size: usize, policy: Policy) -> ThreadPool<T> {
-        assert!(init_size > 0);
+    fn new(core_size: usize, max_size: usize, policy: ExceedLimitPolicy) -> ThreadPool<T> {
         assert!(max_size > 0);
-        assert!(max_size >= init_size);
+        assert!(max_size >= core_size);
 
         let (task_sender, task_receiver) = mpsc::channel();
         let task_receiver = Arc::new(Mutex::new(task_receiver));
@@ -25,7 +68,7 @@ where
         let (task_status_sender, task_status_receiver) = mpsc::channel();
 
         let mut workers = HashMap::new();
-        for id in 0..init_size {
+        for id in 0..core_size {
             workers.insert(
                 id,
                 Worker::new(
@@ -37,7 +80,7 @@ where
             );
         }
 
-        let worker_count = Arc::new(AtomicUsize::new(init_size));
+        let worker_count = Arc::new(AtomicUsize::new(core_size));
         let working_count = Arc::new(AtomicUsize::new(0));
 
         let workers = Arc::new(Mutex::new(workers));
@@ -71,7 +114,7 @@ where
             .unwrap();
 
         ThreadPool {
-            current_id: AtomicUsize::new(init_size),
+            current_id: AtomicUsize::new(core_size),
             workers,
             worker_count,
             working_count,
@@ -102,20 +145,18 @@ where
                 self.policy
             );
             match self.policy {
-                Policy::WAIT => {}
-                Policy::Reject => {
+                ExceedLimitPolicy::WAIT => {}
+                ExceedLimitPolicy::Reject => {
                     return Err(ExecutorError::new(
                         ErrorKind::TaskRejected,
                         "Working tasks reaches to the limit.".to_string(),
                     ));
                 }
-                Policy::CallerRuns => {
-                    log::debug!("Run the task right now at this thread.");
-                    let (result_sender, res_receiver) = mpsc::channel();
-                    let res = f();
-                    if let Err(_) = result_sender.send(res) {};
+                ExceedLimitPolicy::CallerRuns => {
+                    log::debug!("Run the task at the caller's thread. run now.");
                     return Ok(Future {
-                        result_receiver: Some(res_receiver),
+                        result: Some(f()),
+                        result_receiver: None,
                     });
                 }
             };
@@ -153,6 +194,7 @@ where
 
         if let Ok(_) = self.task_sender.as_ref().unwrap().send(job_data) {
             Ok(Future {
+                result: None,
                 result_receiver: Some(res_receiver),
             })
         } else {
@@ -269,6 +311,9 @@ where
     T: Send + 'static,
 {
     pub fn get_result(&mut self) -> Result<T, ExecutorError> {
+        if let Some(result) = self.result.take() {
+            return Ok(result);
+        }
         if let Some(receiver) = self.result_receiver.take() {
             receiver.recv().or(Err(ExecutorError::new(
                 ErrorKind::PoolEnded,
@@ -284,6 +329,9 @@ where
     }
 
     pub fn get_result_timeout(&mut self, timeout: Duration) -> Result<T, ExecutorError> {
+        if let Some(result) = self.result.take() {
+            return Ok(result);
+        }
         if let Some(receiver) = self.result_receiver.take() {
             receiver.recv_timeout(timeout).or(Err(ExecutorError::new(
                 ErrorKind::TimeOut,

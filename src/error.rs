@@ -22,8 +22,10 @@ impl ExecutorError {
     pub fn new(kind: ErrorKind, message: String) -> ExecutorError {
         ExecutorError { kind, message }
     }
+}
 
-    fn print(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+impl Debug for ExecutorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         write!(
             f,
             "ExecutorError [kind: {}, message: {}]",
@@ -34,12 +36,6 @@ impl ExecutorError {
 
 impl Display for ExecutorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        self.print(f)
-    }
-}
-
-impl Debug for ExecutorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        self.print(f)
+        write!(f, "{}", self)
     }
 }
