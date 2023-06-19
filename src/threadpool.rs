@@ -11,7 +11,6 @@ use std::{
 };
 
 impl Builder {
-
     const DEFALUT_KEEP_ALIVE_SEC: u64 = 300;
 
     pub fn new() -> Builder {
@@ -61,7 +60,7 @@ impl Builder {
             Some(policy) => policy,
             None => ExceedLimitPolicy::WAIT,
         };
-        ThreadPool::new(init_size, max_size, policy, self.keep_alive_time)
+        ThreadPool::create(init_size, max_size, policy, self.keep_alive_time)
     }
 }
 
@@ -69,7 +68,16 @@ impl<T> ThreadPool<T>
 where
     T: Send + 'static,
 {
-    fn new(core_size: usize, max_size: usize, policy: ExceedLimitPolicy, keep_alive_time: Option<Duration>) -> ThreadPool<T> {
+    pub fn new(size: usize) -> ThreadPool<T> {
+        ThreadPool::create(size, size, ExceedLimitPolicy::WAIT, None)
+    }
+
+    fn create(
+        core_size: usize,
+        max_size: usize,
+        policy: ExceedLimitPolicy,
+        keep_alive_time: Option<Duration>,
+    ) -> ThreadPool<T> {
         assert!(max_size > 0);
         assert!(max_size >= core_size);
 
@@ -135,7 +143,7 @@ where
             m_thread: Some(m_thread),
             max_size,
             policy,
-            keep_alive_time
+            keep_alive_time,
         }
     }
 
