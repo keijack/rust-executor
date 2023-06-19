@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicUsize, mpsc, Arc, Mutex},
-    thread,
+    thread, time::Duration,
 };
 
 pub mod error;
@@ -30,12 +30,14 @@ pub struct ThreadPool<T> {
     m_thread: Option<thread::JoinHandle<()>>,
     max_size: usize,
     policy: ExceedLimitPolicy,
+    keep_alive_time: Option<Duration>,
 }
 
 pub struct Builder {
     core_pool_size: Option<usize>,
     maximum_pool_size: Option<usize>,
     exeed_limit_policy: Option<ExceedLimitPolicy>,
+    keep_alive_time: Option<Duration>,
 }
 
 type Job<T> = Box<dyn FnOnce() -> T + Send + 'static>;
