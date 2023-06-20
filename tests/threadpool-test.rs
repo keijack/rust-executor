@@ -28,4 +28,6 @@ fn test() {
         let mut f = futures.pop_front().unwrap();
         assert_eq!(f.get_result().unwrap(), i);
     }
+    let f = pool.execute(|| {"abc"});
+    assert_eq!(f.unwrap().get_result().unwrap(), "abc");
 }

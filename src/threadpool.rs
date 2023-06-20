@@ -44,10 +44,7 @@ impl Builder {
         self
     }
 
-    pub fn build<T>(self) -> ThreadPool<T>
-    where
-        T: Send + 'static,
-    {
+    pub fn build(self) -> ThreadPool {
         let init_size = match self.core_pool_size {
             Some(size) => size,
             None => 0,
@@ -64,11 +61,8 @@ impl Builder {
     }
 }
 
-impl<T> ThreadPool<T>
-where
-    T: Send + 'static,
-{
-    pub fn new(size: usize) -> ThreadPool<T> {
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
         ThreadPool::create(size, size, ExceedLimitPolicy::WAIT, None)
     }
 
@@ -77,7 +71,7 @@ where
         max_size: usize,
         policy: ExceedLimitPolicy,
         keep_alive_time: Option<Duration>,
-    ) -> ThreadPool<T> {
+    ) -> ThreadPool {
         assert!(max_size > 0);
         assert!(max_size >= core_size);
 
@@ -147,9 +141,10 @@ where
         }
     }
 
-    pub fn execute<F>(&self, f: F) -> Result<Future<T>, ExecutorError>
+    pub fn execute<F, T>(&self, f: F) -> Result<Future<T>, ExecutorError>
     where
         F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
     {
         let worker_count = self.worker_count.load(Ordering::Relaxed);
         let working_count = self.working_count.load(Ordering::Relaxed);
@@ -205,14 +200,18 @@ where
             );
         }
         self.working_count.fetch_add(1, Ordering::Relaxed);
-        let job = Box::new(f);
         let (result_sender, res_receiver) = mpsc::channel();
-        let job_data = JobData {
-            job,
-            result_sender: result_sender,
+
+        let job = move || {
+            let res = f();
+            if let Err(_) = result_sender.send(res) {
+                log::debug!("Cannot send res to receiver, receiver may close. ");
+            };
         };
 
-        if let Ok(_) = self.task_sender.as_ref().unwrap().send(job_data) {
+        let job = Box::new(job);
+
+        if let Ok(_) = self.task_sender.as_ref().unwrap().send(job) {
             Ok(Future {
                 result: None,
                 result_receiver: Some(res_receiver),
@@ -227,7 +226,7 @@ where
     }
 }
 
-impl<T> Drop for ThreadPool<T> {
+impl Drop for ThreadPool {
     fn drop(&mut self) {
         log::debug!("Dropping thread pool...");
         // drop the sender, so the receiver in workers will receiv error and then break the loop and join the thread.
@@ -241,9 +240,9 @@ impl<T> Drop for ThreadPool<T> {
 }
 
 impl Worker {
-    fn run_in_thread<T>(
+    fn run_in_thread(
         id: usize,
-        task_receiver: Arc<Mutex<mpsc::Receiver<JobData<T>>>>,
+        task_receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
         wait_time_out: Option<Duration>,
         task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
     ) {
@@ -275,12 +274,8 @@ impl Worker {
                 }
             };
 
-            let fun = job.job;
-            let result_sender = job.result_sender;
-            let res = fun();
-            if let Err(_) = result_sender.send(res) {
-                log::debug!("Send result to Future error, receiver may close. ");
-            };
+            job();
+
             if let Err(_) = task_status_sender.send((id, WorkerStatus::JobDone)) {
                 log::debug!("Send worder staus error, receiver may close.");
             };
@@ -290,15 +285,12 @@ impl Worker {
             .unwrap();
     }
 
-    fn new<T>(
+    fn new(
         id: usize,
-        task_receiver: Arc<Mutex<mpsc::Receiver<JobData<T>>>>,
+        task_receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
         wait_time_out: Option<Duration>,
         task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
-    ) -> Worker
-    where
-        T: Send + 'static,
-    {
+    ) -> Worker {
         let thread = thread::Builder::new()
             .name("thread-pool-worker-".to_string() + id.to_string().as_str())
             .spawn(move || {
