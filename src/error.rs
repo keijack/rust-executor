@@ -7,35 +7,37 @@ pub enum ErrorKind {
     TimeOut,
     TaskRejected,
 }
+
+#[derive(Debug)]
 pub struct ExecutorError {
     kind: ErrorKind,
     message: String,
 }
 
 impl Display for ErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
+        let msg = match self {
+            ErrorKind::PoolEnded => "PoolEnded",
+            ErrorKind::ResultAlreadyTaken => "ResultAlreadyTaken",
+            ErrorKind::TaskRejected => "TaskRejected",
+            ErrorKind::TimeOut => "TimeOUt",
+        };
+        write!(f, "{:?}", msg)
     }
 }
 
 impl ExecutorError {
-    pub fn new(kind: ErrorKind, message: String) -> ExecutorError {
+    pub(crate) fn new(kind: ErrorKind, message: String) -> ExecutorError {
         ExecutorError { kind, message }
     }
 }
 
-impl Debug for ExecutorError {
+impl Display for ExecutorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
         write!(
             f,
             "ExecutorError [kind: {}, message: {}]",
             self.kind, self.message
         )
-    }
-}
-
-impl Display for ExecutorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result {
-        write!(f, "{}", self)
     }
 }

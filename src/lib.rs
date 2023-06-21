@@ -15,8 +15,7 @@ pub enum ExceedLimitPolicy {
     CallerRuns,
 }
 
-pub struct Future<T> {
-    result: Option<T>,
+pub struct Expectation<T> {
     result_receiver: Option<mpsc::Receiver<T>>,
 }
 
