@@ -5,9 +5,11 @@ mod common;
 #[test]
 fn test() {
     common::setup_log();
-    let pool = executor::Builder::new()
+    let pool = executor::threadpool::Builder::new()
+        .core_pool_size(1)
         .maximum_pool_size(3)
-        .exeed_limit_policy(executor::ExceedLimitPolicy::CallerRuns)
+        .keep_alive_time(Duration::from_secs(300))
+        .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::CallerRuns)
         .build();
     let mut expectations = VecDeque::new();
     let e = 10;
@@ -34,16 +36,30 @@ fn test() {
 #[test]
 fn test_panic() {
     common::setup_log();
-    let pool = executor::Builder::new()
-        .core_pool_size(1)
-        .maximum_pool_size(1)
-        .exeed_limit_policy(executor::ExceedLimitPolicy::WAIT)
-        .build();
+    let pool = executor::ThreadPool::new(1);
     let r = pool.execute(|| {
         panic!("panic!!!");
     });
-    assert!(r.unwrap().get_result().is_err());
-    
+    let res = r.unwrap().get_result();
+    assert!(res.is_err());
+    if let Err(err) = res {
+        matches!(err.kind(), executor::error::ErrorKind::Panic);
+    }
+
     let r = pool.execute(|| "abc");
     assert_eq!(r.unwrap().get_result().unwrap(), "abc");
+}
+
+#[test]
+fn test_timeout() {
+    common::setup_log();
+    let pool = executor::ThreadPool::new(1);
+    let r = pool.execute(|| {
+        std::thread::sleep(Duration::from_secs(10));
+    });
+    let res = r.unwrap().get_result_timeout(Duration::from_secs(3));
+    assert!(res.is_err());
+    if let Err(err) = res {
+        matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+    }
 }

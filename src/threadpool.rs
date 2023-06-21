@@ -11,6 +11,22 @@ use std::{
     time::Duration,
 };
 
+pub(super) type Job = Box<dyn FnOnce() + Send + 'static>;
+
+#[derive(Debug)]
+pub enum ExceedLimitPolicy {
+    Wait,
+    Reject,
+    CallerRuns,
+}
+
+pub struct Builder {
+    core_pool_size: Option<usize>,
+    maximum_pool_size: Option<usize>,
+    exeed_limit_policy: Option<ExceedLimitPolicy>,
+    keep_alive_time: Option<Duration>,
+}
+
 impl Builder {
     const DEFALUT_KEEP_ALIVE_SEC: u64 = 300;
 
@@ -18,7 +34,7 @@ impl Builder {
         Builder {
             core_pool_size: None,
             maximum_pool_size: None,
-            exeed_limit_policy: Some(ExceedLimitPolicy::WAIT),
+            exeed_limit_policy: Some(ExceedLimitPolicy::Wait),
             keep_alive_time: Some(Duration::from_secs(Builder::DEFALUT_KEEP_ALIVE_SEC)),
         }
     }
@@ -56,7 +72,7 @@ impl Builder {
         };
         let policy = match self.exeed_limit_policy {
             Some(policy) => policy,
-            None => ExceedLimitPolicy::WAIT,
+            None => ExceedLimitPolicy::Wait,
         };
         ThreadPool::create(init_size, max_size, policy, self.keep_alive_time)
     }
@@ -64,7 +80,7 @@ impl Builder {
 
 impl ThreadPool {
     pub fn new(size: usize) -> ThreadPool {
-        ThreadPool::create(size, size, ExceedLimitPolicy::WAIT, None)
+        ThreadPool::create(size, size, ExceedLimitPolicy::Wait, None)
     }
 
     fn create(
@@ -169,7 +185,7 @@ impl ThreadPool {
                 self.policy
             );
             match self.policy {
-                ExceedLimitPolicy::WAIT => {}
+                ExceedLimitPolicy::Wait => {}
                 ExceedLimitPolicy::Reject => {
                     return Err(ExecutorError::new(
                         ErrorKind::TaskRejected,
@@ -235,6 +251,17 @@ impl Drop for ThreadPool {
             if let Err(_) = thread.join() {}
         }
     }
+}
+
+pub(super) struct Worker {
+    id: usize,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+#[derive(Debug)]
+pub(super) enum WorkerStatus {
+    JobDone,
+    ThreadExit,
 }
 
 impl Worker {
