@@ -13,10 +13,39 @@ use std::{
 
 pub(super) type Job = Box<dyn FnOnce() + Send + 'static>;
 
+///
+/// The policy that can be set when the task submited exceed the maximum size of the `Threadpool`.
+///
 #[derive(Debug)]
 pub enum ExceedLimitPolicy {
+    ///
+    /// The task will wait until some workers are idle.
+    ///
     Wait,
+    ///
+    /// The task will be rejected, A `TaskRejected` `ExecutorError` will be given.
+    ///
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    ///         .core_pool_size(1)
+    ///         .maximum_pool_size(1)
+    ///         .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+    ///         .build();
+    /// let res = pool.execute(|| {
+    ///         std::thread::sleep(std::time::Duration::from_secs(10));
+    /// });
+    /// assert!(res.is_ok());
+    /// let res = pool.execute(|| "a");
+    /// assert!(res.is_err());
+    /// if let Err(err) = res {
+    ///         matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
+    /// }
+    /// ```
+    ///
     Reject,
+    ///
+    /// The task will be run in the caller's thread, and will run immediatly.
+    ///
     CallerRuns,
 }
 
@@ -30,6 +59,20 @@ pub struct Builder {
 impl Builder {
     const DEFALUT_KEEP_ALIVE_SEC: u64 = 300;
 
+    ///
+    /// A builder use to build a `ThreadPool`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    /// .core_pool_size(1)
+    /// .maximum_pool_size(3)
+    /// .keep_alive_time(std::time::Duration::from_secs(300)) // None-core-thread keep_alive_time, default value is 5 minutes.
+    /// .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject) // Default value is Wait.
+    /// .build();
+    /// ```
+    ///
     pub fn new() -> Builder {
         Builder {
             core_pool_size: None,
@@ -39,22 +82,85 @@ impl Builder {
         }
     }
 
+    ///
+    /// Core threads will run until the threadpool dropped.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    /// .core_pool_size(1)
+    /// .build();
+    /// ```
+    ///
     pub fn core_pool_size(mut self, size: usize) -> Builder {
         self.core_pool_size = Some(size);
         self
     }
 
+    ///
+    /// Maximum threads that run in this threadpool, include the core threads,
+    /// the size of the none-core threads = `maximum_pool_size - core_pool_size`.
+    ///
+    /// None core threads will live with a given `keep_alive_time`. If the `keep_alive_time`
+    /// is not set, it will default to 5 minutes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    /// .core_pool_size(1)
+    /// .maximum_pool_size(3)
+    /// .build();
+    /// ```
+    ///
     pub fn maximum_pool_size(mut self, size: usize) -> Builder {
         assert!(size > 0);
         self.maximum_pool_size = Some(size);
         self
     }
 
+    ///
+    /// When the threads are all working, the new tasks coming will follow the given policy
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    /// .core_pool_size(1)
+    /// .maximum_pool_size(1)
+    /// .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+    /// .build();
+    /// let res = pool.execute(|| {
+    ///     std::thread::sleep(std::time::Duration::from_secs(3));
+    /// });
+    /// assert!(res.is_ok());
+    /// let res = pool.execute(|| "a");
+    /// assert!(res.is_err());
+    /// if let Err(err) = res {
+    ///     matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
+    /// }
+    /// ```
+    /// 
     pub fn exeed_limit_policy(mut self, policy: ExceedLimitPolicy) -> Builder {
         self.exeed_limit_policy = Some(policy);
         self
     }
 
+    ///
+    /// None core threads will live with a given `keep_alive_time`. If the `keep_alive_time`
+    /// is not set, it will default to 5 minutes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::threadpool::Builder::new()
+    /// .core_pool_size(1)
+    /// .maximum_pool_size(3)
+    /// .keep_alive_time(std::time::Duration::from_secs(60))
+    /// .build();
+    /// ```
+    ///
     pub fn keep_alive_time(mut self, keep_alive_time: Duration) -> Builder {
         assert!(!keep_alive_time.is_zero());
         self.keep_alive_time = Some(keep_alive_time);
@@ -79,6 +185,18 @@ impl Builder {
 }
 
 impl ThreadPool {
+    ///
+    /// Create a fix size thread pool with the Polic `ExceedLimitPolicy::Wait`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use executor::ThreadPool;
+    ///
+    /// let pool = ThreadPool::new(1);
+    /// pool.execute(|| {println!("hello, world!");});
+    /// ```
+    ///
     pub fn new(size: usize) -> ThreadPool {
         ThreadPool::create(size, size, ExceedLimitPolicy::Wait, None)
     }
@@ -158,6 +276,10 @@ impl ThreadPool {
         }
     }
 
+    ///
+    /// Execute a closure in the threadpool, return the result of this execution. 
+    /// 
+    /// When 
     pub fn execute<F, T>(&self, f: F) -> Result<Expectation<T>, ExecutorError>
     where
         F: FnOnce() -> T + Send + UnwindSafe + 'static,

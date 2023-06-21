@@ -55,11 +55,29 @@ fn test_timeout() {
     common::setup_log();
     let pool = executor::ThreadPool::new(1);
     let r = pool.execute(|| {
-        std::thread::sleep(Duration::from_secs(10));
+        std::thread::sleep(Duration::from_secs(3));
     });
-    let res = r.unwrap().get_result_timeout(Duration::from_secs(3));
+    let res = r.unwrap().get_result_timeout(Duration::from_secs(1));
     assert!(res.is_err());
     if let Err(err) = res {
         matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+    }
+}
+
+#[test]
+fn test_reject() {
+    let pool = executor::threadpool::Builder::new()
+        .core_pool_size(1)
+        .maximum_pool_size(1)
+        .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+        .build();
+    let res = pool.execute(|| {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    });
+    assert!(res.is_ok());
+    let res = pool.execute(|| "a");
+    assert!(res.is_err());
+    if let Err(err) = res {
+        matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
     }
 }
