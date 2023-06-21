@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display, Result};
+use std::{
+    any::Any,
+    fmt::{Debug, Display, Result},
+};
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -6,12 +9,14 @@ pub enum ErrorKind {
     ResultAlreadyTaken,
     TimeOut,
     TaskRejected,
+    Panic,
 }
 
 #[derive(Debug)]
 pub struct ExecutorError {
     kind: ErrorKind,
     message: String,
+    cause: Option<Box<dyn Any + Send>>,
 }
 
 impl Display for ErrorKind {
@@ -21,6 +26,7 @@ impl Display for ErrorKind {
             ErrorKind::ResultAlreadyTaken => "ResultAlreadyTaken",
             ErrorKind::TaskRejected => "TaskRejected",
             ErrorKind::TimeOut => "TimeOUt",
+            ErrorKind::Panic => "Panic",
         };
         write!(f, "{:?}", msg)
     }
@@ -28,7 +34,35 @@ impl Display for ErrorKind {
 
 impl ExecutorError {
     pub(crate) fn new(kind: ErrorKind, message: String) -> ExecutorError {
-        ExecutorError { kind, message }
+        ExecutorError {
+            kind,
+            message,
+            cause: None,
+        }
+    }
+
+    pub(crate) fn with_cause(
+        kind: ErrorKind,
+        message: String,
+        cause: Box<dyn Any + Send>,
+    ) -> ExecutorError {
+        ExecutorError {
+            kind,
+            message,
+            cause: Some(cause),
+        }
+    }
+
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
+
+    pub fn message(&self) -> &String {
+        &self.message
+    }
+
+    pub fn cause(&self) -> &Option<Box<dyn Any + Send>> {
+        &self.cause
     }
 }
 

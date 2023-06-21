@@ -147,17 +147,11 @@ impl ThreadPool {
         F: FnOnce() -> T + Send + UnwindSafe + 'static,
         T: Send + 'static,
     {
-        let (result_sender, res_receiver) = mpsc::channel();
+        let (result_sender, result_receiver) = mpsc::channel();
 
-        let job = move || match std::panic::catch_unwind(f) {
-            Ok(res) => {
-                if let Err(_) = result_sender.send(res) {
-                    log::debug!("Cannot send res to receiver, receiver may close. ");
-                }
-            }
-            Err(err) => {
-                log::error!("Run job panic! {:?}", err);
-                drop(result_sender);
+        let job = move || {
+            if let Err(_) = result_sender.send(std::panic::catch_unwind(f)) {
+                log::debug!("Cannot send res to receiver, receiver may close. ");
             }
         };
 
@@ -186,7 +180,7 @@ impl ThreadPool {
                     log::debug!("Run the task at the caller's thread. run now.");
                     job();
                     return Ok(Expectation {
-                        result_receiver: Some(res_receiver),
+                        result_receiver: Some(result_receiver),
                     });
                 }
             };
@@ -218,7 +212,7 @@ impl ThreadPool {
 
         if let Ok(_) = self.task_sender.as_ref().unwrap().send(Box::new(job)) {
             Ok(Expectation {
-                result_receiver: Some(res_receiver),
+                result_receiver: Some(result_receiver),
             })
         } else {
             Err(ExecutorError::new(
@@ -328,12 +322,21 @@ where
 {
     pub fn get_result(&mut self) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
-            log::debug!("start to receive task result!");
-            receiver.recv().or(Err(ExecutorError::new(
-                ErrorKind::PoolEnded,
-                "Cannot send message to worker thread, This threadpool is already dropped."
-                    .to_string(),
-            )))
+            match receiver.recv() {
+                Ok(res) => match res {
+                    Ok(res) => Ok(res),
+                    Err(cause) => Err(ExecutorError::with_cause(
+                        ErrorKind::Panic,
+                        "Function panic!".to_string(),
+                        cause,
+                    )),
+                },
+                Err(_) => Err(ExecutorError::new(
+                    ErrorKind::PoolEnded,
+                    "Cannot send message to worker thread, This threadpool is already dropped."
+                        .to_string(),
+                )),
+            }
         } else {
             log::debug!("Receive result error! Result may be taken!");
             Err(ExecutorError::new(
@@ -345,10 +348,20 @@ where
 
     pub fn get_result_timeout(&mut self, timeout: Duration) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
-            receiver.recv_timeout(timeout).or(Err(ExecutorError::new(
-                ErrorKind::TimeOut,
-                "Receive result timeout.".to_string(),
-            )))
+            match receiver.recv_timeout(timeout) {
+                Ok(res) => match res {
+                    Ok(res) => Ok(res),
+                    Err(cause) => Err(ExecutorError::with_cause(
+                        ErrorKind::Panic,
+                        "Function panic!".to_string(),
+                        cause,
+                    )),
+                },
+                Err(_) => Err(ExecutorError::new(
+                    ErrorKind::TimeOut,
+                    "Receive result timeout.".to_string(),
+                )),
+            }
         } else {
             Err(ExecutorError::new(
                 ErrorKind::ResultAlreadyTaken,

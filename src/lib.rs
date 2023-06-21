@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     collections::HashMap,
     sync::{atomic::AtomicUsize, mpsc, Arc, Mutex},
     thread,
@@ -16,7 +17,7 @@ pub enum ExceedLimitPolicy {
 }
 
 pub struct Expectation<T> {
-    result_receiver: Option<mpsc::Receiver<T>>,
+    result_receiver: Option<mpsc::Receiver<Result<T, Box<dyn Any + Send>>>>,
 }
 
 pub struct ThreadPool {
