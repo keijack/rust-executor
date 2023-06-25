@@ -72,9 +72,12 @@ fn test_worker_exit() {
         .maximum_pool_size(2)
         .keep_alive_time(Duration::from_secs(1))
         .build();
-    pool.execute(|| {}).unwrap();
-    pool.execute(|| {}).unwrap();
-    std::thread::sleep(Duration::from_secs(3));
+    pool.execute(|| std::thread::sleep(Duration::from_secs(1)))
+        .unwrap();
+    pool.execute(|| std::thread::sleep(Duration::from_secs(1)))
+        .unwrap();
+
+    std::thread::sleep(Duration::from_secs(10));
     assert_eq!(1, pool.size());
 }
 

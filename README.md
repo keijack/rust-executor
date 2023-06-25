@@ -1,4 +1,4 @@
-# Rust Executor
+# Rust Threadpool Executor
 
 ![crate.io-version](https://img.shields.io/crates/v/threadpool-executor)
 ![docs.rs-build](https://img.shields.io/docsrs/threadpool-executor)

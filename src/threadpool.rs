@@ -432,41 +432,57 @@ impl Worker {
         task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
     ) {
         loop {
-            let job = match task_receiver.lock() {
+            let receiver = match task_receiver.lock() {
                 // Won't do job inside. Doing job here may cause the lock release after the job done.
-                Ok(receiver) => {
-                    if let Some(timeout) = wait_time_out {
-                        match receiver.recv_timeout(timeout) {
-                            Ok(job) => job,
-                            Err(_) => {
-                                log::debug!("Receive message timeout, release this worker.");
-                                break;
-                            }
-                        }
-                    } else {
-                        match receiver.recv() {
-                            Ok(job) => job,
-                            Err(_) => {
-                                log::debug!("Chanel sender may disconnect, receive job, error. exit this loop .");
-                                break;
-                            }
-                        }
-                    }
-                }
+                Ok(receiver) => receiver,
                 Err(err) => {
-                    log::debug!("Cannot lock receiver! close this thread. err {:?}", err);
+                    log::debug!(
+                        "Worker[#{:?}] Cannot lock receiver! close this thread. err {:?}",
+                        id,
+                        err
+                    );
                     break;
                 }
             };
 
+            let job = if let Some(timeout) = wait_time_out {
+                log::debug!("Worker[#{:?}] will wait for time {:?}", id, timeout);
+                match receiver.recv_timeout(timeout) {
+                    Ok(job) => job,
+                    Err(_) => {
+                        log::debug!(
+                            "Worker[#{:?}] receive message timeout, release this worker.",
+                            id
+                        );
+                        break;
+                    }
+                }
+            } else {
+                match receiver.recv() {
+                    Ok(job) => job,
+                    Err(_) => {
+                        log::debug!("Worker[#{:?}] Chanel sender may disconnect, receive job, error. exit this loop .", id);
+                        break;
+                    }
+                }
+            };
+
+            log::debug!("Worker[#{:?}] gets the job now, run the job.", id);
+
             job();
 
             if let Err(_) = task_status_sender.send((id, WorkerStatus::JobDone)) {
-                log::debug!("Send worder staus error, receiver may close.");
+                log::debug!(
+                    "Worker[#{:?}] Send worder staus error, receiver may close.",
+                    id
+                );
             };
         }
         if let Err(_) = task_status_sender.send((id, WorkerStatus::ThreadExit)) {
-            log::debug!("Send worder staus error, receiver may close.");
+            log::debug!(
+                "Worker[#{:?}] Send worder staus error, receiver may close.",
+                id
+            );
         }
     }
 
