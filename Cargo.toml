@@ -8,11 +8,10 @@ readme = "README.md"
 homepage = "https://github.com/keijack/rust-executor"
 repository = "https://github.com/keijack/rust-executor"
 license-file = "LICENSE"
-keywords = ["threadpool", "executor", "thread", "pool", "threading", "parallelism", "future"]
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+keywords = ["threadpool", "thread", "pool", "threading", "parallelism"]
 
 [dependencies]
 log = "*"
-simple_logger = "^4"
+
+[dev-dependencies]
+simple_logger = "4.*"
