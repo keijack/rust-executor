@@ -122,9 +122,9 @@ impl Builder {
 
     ///
     /// When the threads are all working, the new tasks coming will follow the given policy
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// let pool = executor::threadpool::Builder::new()
     /// .core_pool_size(1)
@@ -141,7 +141,7 @@ impl Builder {
     ///     matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
     /// }
     /// ```
-    /// 
+    ///
     pub fn exeed_limit_policy(mut self, policy: ExceedLimitPolicy) -> Builder {
         self.exeed_limit_policy = Some(policy);
         self
@@ -277,9 +277,40 @@ impl ThreadPool {
     }
 
     ///
-    /// Execute a closure in the threadpool, return the result of this execution. 
-    /// 
-    /// When 
+    /// Execute a closure in the threadpool, return a `Result` indicating whether the `submit` operation succeeded or not.
+    ///
+    /// `Submit` operation will fail when the pool reach to `the maximum_pool_size` and the `exeed_limit_policy` is set to `Reject`.
+    ///
+    /// You can get a `Expectation<T>` when `Result` is `Ok`, `T` here is the return type of your closure.
+    ///
+    /// You can use `get_result` or `get_result_timeout` method in the `Expectation` object to get the result of your closure. The
+    /// two method above will block when the result is returned or timeout.
+    ///
+    /// `Expectation::get_result` and `Expectation::get_result_timeout` return a `Result` which will return the return value of your
+    /// closure when `Ok`, and `Err` will be returned when your closure `panic`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| 1 + 2);
+    /// assert_eq!(exp.unwrap().get_result().unwrap(), 3);
+    /// ```
+    ///
+    /// When `panic`:
+    ///
+    /// ```
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| {
+    ///     panic!("panic!!!");
+    /// });
+    /// let res = exp.unwrap().get_result();
+    /// assert!(res.is_err());
+    /// if let Err(err) = res {
+    ///     matches!(err.kind(), executor::error::ErrorKind::Panic);
+    /// }
+    /// ```
+    ///
     pub fn execute<F, T>(&self, f: F) -> Result<Expectation<T>, ExecutorError>
     where
         F: FnOnce() -> T + Send + UnwindSafe + 'static,
@@ -427,9 +458,9 @@ impl Worker {
                 log::debug!("Send worder staus error, receiver may close.");
             };
         }
-        task_status_sender
-            .send((id, WorkerStatus::ThreadExit))
-            .unwrap();
+        if let Err(_) = task_status_sender.send((id, WorkerStatus::ThreadExit)) {
+            log::debug!("Send worder staus error, receiver may close.");
+        }
     }
 
     fn new(
@@ -469,6 +500,31 @@ impl<T> Expectation<T>
 where
     T: Send + 'static,
 {
+    /// This method returns a `Result` which will return the return value of your
+    /// closure when `Ok`, and `Err` will be returned when your closure `panic`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| 1 + 2);
+    /// assert_eq!(exp.unwrap().get_result().unwrap(), 3);
+    /// ```
+    ///
+    /// When `panic`:
+    ///
+    /// ```
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| {
+    ///     panic!("panic!!!");
+    /// });
+    /// let res = exp.unwrap().get_result();
+    /// assert!(res.is_err());
+    /// if let Err(err) = res {
+    ///     matches!(err.kind(), executor::error::ErrorKind::Panic);
+    /// }
+    /// ```
+    ///
     pub fn get_result(&mut self) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
             match receiver.recv() {
@@ -495,6 +551,33 @@ where
         }
     }
 
+    /// This method returns a `Result` which will return the return value of your
+    /// closure when `Ok`, and `Err` will be returned when your closure `panic` or
+    /// `timeout`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| 1 + 2);
+    /// assert_eq!(exp.unwrap().get_result_timeout(std::time::Duration::from_secs(1)).unwrap(), 3);
+    /// ```
+    ///
+    /// When `timeout`:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// let pool = executor::ThreadPool::new(1);
+    /// let exp = pool.execute(|| {
+    ///     std::thread::sleep(Duration::from_secs(3));
+    /// });
+    /// let res = exp.unwrap().get_result_timeout(Duration::from_secs(1));
+    /// assert!(res.is_err());
+    /// if let Err(err) = res {
+    ///     matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+    /// }
+    /// ```
+    ///
     pub fn get_result_timeout(&mut self, timeout: Duration) -> Result<T, ExecutorError> {
         if let Some(receiver) = self.result_receiver.take() {
             match receiver.recv_timeout(timeout) {
