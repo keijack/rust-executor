@@ -5,11 +5,11 @@ mod common;
 #[test]
 fn test() {
     common::setup_log();
-    let pool = executor::threadpool::Builder::new()
+    let pool = threadpool_executor::threadpool::Builder::new()
         .core_pool_size(1)
         .maximum_pool_size(3)
         .keep_alive_time(Duration::from_secs(300))
-        .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::CallerRuns)
+        .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::CallerRuns)
         .build();
     let mut expectations = VecDeque::new();
     let e = 10;
@@ -36,14 +36,14 @@ fn test() {
 #[test]
 fn test_panic() {
     common::setup_log();
-    let pool = executor::ThreadPool::new(1);
+    let pool = threadpool_executor::ThreadPool::new(1);
     let r = pool.execute(|| {
         panic!("panic!!!");
     });
     let res = r.unwrap().get_result();
     assert!(res.is_err());
     if let Err(err) = res {
-        matches!(err.kind(), executor::error::ErrorKind::Panic);
+        matches!(err.kind(), threadpool_executor::error::ErrorKind::Panic);
     }
 
     let r = pool.execute(|| "abc");
@@ -53,23 +53,23 @@ fn test_panic() {
 #[test]
 fn test_timeout() {
     common::setup_log();
-    let pool = executor::ThreadPool::new(1);
+    let pool = threadpool_executor::ThreadPool::new(1);
     let r = pool.execute(|| {
         std::thread::sleep(Duration::from_secs(3));
     });
     let res = r.unwrap().get_result_timeout(Duration::from_secs(1));
     assert!(res.is_err());
     if let Err(err) = res {
-        matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+        matches!(err.kind(), threadpool_executor::error::ErrorKind::TimeOut);
     }
 }
 
 #[test]
 fn test_reject() {
-    let pool = executor::threadpool::Builder::new()
+    let pool = threadpool_executor::threadpool::Builder::new()
         .core_pool_size(1)
         .maximum_pool_size(1)
-        .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+        .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Reject)
         .build();
     let res = pool.execute(|| {
         std::thread::sleep(std::time::Duration::from_secs(3));
@@ -78,6 +78,6 @@ fn test_reject() {
     let res = pool.execute(|| "a");
     assert!(res.is_err());
     if let Err(err) = res {
-        matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
+        matches!(err.kind(), threadpool_executor::error::ErrorKind::TaskRejected);
     }
 }

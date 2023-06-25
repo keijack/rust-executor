@@ -26,10 +26,10 @@ pub enum ExceedLimitPolicy {
     /// The task will be rejected, A `TaskRejected` `ExecutorError` will be given.
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     ///         .core_pool_size(1)
     ///         .maximum_pool_size(1)
-    ///         .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+    ///         .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Reject)
     ///         .build();
     /// let res = pool.execute(|| {
     ///         std::thread::sleep(std::time::Duration::from_secs(10));
@@ -38,7 +38,7 @@ pub enum ExceedLimitPolicy {
     /// let res = pool.execute(|| "a");
     /// assert!(res.is_err());
     /// if let Err(err) = res {
-    ///         matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
+    ///         matches!(err.kind(), threadpool_executor::error::ErrorKind::TaskRejected);
     /// }
     /// ```
     ///
@@ -65,11 +65,11 @@ impl Builder {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     /// .core_pool_size(1)
     /// .maximum_pool_size(3)
     /// .keep_alive_time(std::time::Duration::from_secs(300)) // None-core-thread keep_alive_time, default value is 5 minutes.
-    /// .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject) // Default value is Wait.
+    /// .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Reject) // Default value is Wait.
     /// .build();
     /// ```
     ///
@@ -88,7 +88,7 @@ impl Builder {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     /// .core_pool_size(1)
     /// .build();
     /// ```
@@ -108,7 +108,7 @@ impl Builder {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     /// .core_pool_size(1)
     /// .maximum_pool_size(3)
     /// .build();
@@ -126,10 +126,10 @@ impl Builder {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     /// .core_pool_size(1)
     /// .maximum_pool_size(1)
-    /// .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Reject)
+    /// .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Reject)
     /// .build();
     /// let res = pool.execute(|| {
     ///     std::thread::sleep(std::time::Duration::from_secs(3));
@@ -138,7 +138,7 @@ impl Builder {
     /// let res = pool.execute(|| "a");
     /// assert!(res.is_err());
     /// if let Err(err) = res {
-    ///     matches!(err.kind(), executor::error::ErrorKind::TaskRejected);
+    ///     matches!(err.kind(), threadpool_executor::error::ErrorKind::TaskRejected);
     /// }
     /// ```
     ///
@@ -154,7 +154,7 @@ impl Builder {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::threadpool::Builder::new()
+    /// let pool = threadpool_executor::threadpool::Builder::new()
     /// .core_pool_size(1)
     /// .maximum_pool_size(3)
     /// .keep_alive_time(std::time::Duration::from_secs(60))
@@ -191,7 +191,7 @@ impl ThreadPool {
     /// # Example
     ///
     /// ```
-    /// use executor::ThreadPool;
+    /// use threadpool_executor::ThreadPool;
     ///
     /// let pool = ThreadPool::new(1);
     /// pool.execute(|| {println!("hello, world!");});
@@ -292,7 +292,7 @@ impl ThreadPool {
     /// # Example
     ///
     /// ```
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| 1 + 2);
     /// assert_eq!(exp.unwrap().get_result().unwrap(), 3);
     /// ```
@@ -300,14 +300,14 @@ impl ThreadPool {
     /// When `panic`:
     ///
     /// ```
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| {
     ///     panic!("panic!!!");
     /// });
     /// let res = exp.unwrap().get_result();
     /// assert!(res.is_err());
     /// if let Err(err) = res {
-    ///     matches!(err.kind(), executor::error::ErrorKind::Panic);
+    ///     matches!(err.kind(), threadpool_executor::error::ErrorKind::Panic);
     /// }
     /// ```
     ///
@@ -506,7 +506,7 @@ where
     /// # Example
     ///
     /// ```
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| 1 + 2);
     /// assert_eq!(exp.unwrap().get_result().unwrap(), 3);
     /// ```
@@ -514,14 +514,14 @@ where
     /// When `panic`:
     ///
     /// ```
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| {
     ///     panic!("panic!!!");
     /// });
     /// let res = exp.unwrap().get_result();
     /// assert!(res.is_err());
     /// if let Err(err) = res {
-    ///     matches!(err.kind(), executor::error::ErrorKind::Panic);
+    ///     matches!(err.kind(), threadpool_executor::error::ErrorKind::Panic);
     /// }
     /// ```
     ///
@@ -558,7 +558,7 @@ where
     /// # Example
     ///
     /// ```
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| 1 + 2);
     /// assert_eq!(exp.unwrap().get_result_timeout(std::time::Duration::from_secs(1)).unwrap(), 3);
     /// ```
@@ -567,14 +567,14 @@ where
     ///
     /// ```
     /// use std::time::Duration;
-    /// let pool = executor::ThreadPool::new(1);
+    /// let pool = threadpool_executor::ThreadPool::new(1);
     /// let exp = pool.execute(|| {
     ///     std::thread::sleep(Duration::from_secs(3));
     /// });
     /// let res = exp.unwrap().get_result_timeout(Duration::from_secs(1));
     /// assert!(res.is_err());
     /// if let Err(err) = res {
-    ///     matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+    ///     matches!(err.kind(), threadpool_executor::error::ErrorKind::TimeOut);
     /// }
     /// ```
     ///
