@@ -391,6 +391,13 @@ impl ThreadPool {
             ))
         }
     }
+
+    ///
+    /// Returen the current workers' size.
+    ///
+    pub fn size(&self) -> usize {
+        self.workers.lock().unwrap().len()
+    }
 }
 
 impl Drop for ThreadPool {

@@ -65,7 +65,22 @@ fn test_timeout() {
 }
 
 #[test]
+fn test_worker_exit() {
+    common::setup_log();
+    let pool = threadpool_executor::threadpool::Builder::new()
+        .core_pool_size(1)
+        .maximum_pool_size(2)
+        .keep_alive_time(Duration::from_secs(1))
+        .build();
+    pool.execute(|| {}).unwrap();
+    pool.execute(|| {}).unwrap();
+    std::thread::sleep(Duration::from_secs(3));
+    assert_eq!(1, pool.size());
+}
+
+#[test]
 fn test_reject() {
+    common::setup_log();
     let pool = threadpool_executor::threadpool::Builder::new()
         .core_pool_size(1)
         .maximum_pool_size(1)
@@ -78,6 +93,9 @@ fn test_reject() {
     let res = pool.execute(|| "a");
     assert!(res.is_err());
     if let Err(err) = res {
-        matches!(err.kind(), threadpool_executor::error::ErrorKind::TaskRejected);
+        matches!(
+            err.kind(),
+            threadpool_executor::error::ErrorKind::TaskRejected
+        );
     }
 }

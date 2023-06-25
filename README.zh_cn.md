@@ -7,7 +7,7 @@
 创建一个固定数量的线程池，并且当任务超额后等待旧任务执行完成：
 
 ```rust
-let pool = executor::ThreadPool::new(1);
+let pool = threadpool_executor::ThreadPool::new(1);
 let expectation = pool.execute(|| {"hello, thread pool!"}).unwrap();
 assert(expectation.get_result().unwrap(), "hello, thread pool!");
 ```
@@ -15,14 +15,14 @@ assert(expectation.get_result().unwrap(), "hello, thread pool!");
 等待结果时可以选择超时时间。
 
 ```rust
-let pool = executor::ThreadPool::new(1);
+let pool = threadpool_executor::ThreadPool::new(1);
 let r = pool.execute(|| {
     std::thread::sleep(Duration::from_secs(10));
 });
 let res = r.unwrap().get_result_timeout(Duration::from_secs(3));
 assert!(res.is_err());
 if let Err(err) = res {
-    matches!(err.kind(), executor::error::ErrorKind::TimeOut);
+    matches!(err.kind(), threadpool_executor::error::ErrorKind::TimeOut);
 }
 ```
 
@@ -30,25 +30,25 @@ if let Err(err) = res {
 使用 `Builder` 来创建线程池：
 
 ```rust
-let pool = executor::threadpool::Builder::new()
+let pool = threadpool_executor::threadpool::Builder::new()
         .core_pool_size(1)
         .maximum_pool_size(3)
         .keep_alive_time(Duration::from_secs(300))
-        .exeed_limit_policy(executor::threadpool::ExceedLimitPolicy::Wait)
+        .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Wait)
         .build();
 ```
 
 线程池会尝试使用 `std::panic::catch_unwind` 来捕获提交任务的 `Panic`，如果捕获到，则会在 `get_result` 中返回一个 `Panic` 类型的错误。
 
 ```rust
-let pool = executor::ThreadPool::new(1);
+let pool = threadpool_executor::ThreadPool::new(1);
 let r = pool.execute(|| {
     panic!("panic!!!");
 });
 let res = r.unwrap().get_result();
 assert!(res.is_err());
 if let Err(err) = res {
-    matches!(err.kind(), executor::error::ErrorKind::Panic);
+    matches!(err.kind(), threadpool_executor::error::ErrorKind::Panic);
 }
 ```
 
