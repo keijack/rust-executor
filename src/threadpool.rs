@@ -5,7 +5,7 @@ use std::{
     panic::UnwindSafe,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        mpsc, Arc, Mutex,
+        Arc, Mutex,
     },
     thread,
     time::Duration,
@@ -210,21 +210,15 @@ impl ThreadPool {
         assert!(max_size > 0);
         assert!(max_size >= core_size);
 
-        let (task_sender, task_receiver) = mpsc::channel();
-        let task_receiver = Arc::new(Mutex::new(task_receiver));
+        let (task_sender, task_receiver) = crossbeam_channel::unbounded();
 
-        let (task_status_sender, task_status_receiver) = mpsc::channel();
+        let (task_status_sender, task_status_receiver) = crossbeam_channel::unbounded();
 
         let mut workers = HashMap::new();
         for id in 0..core_size {
             workers.insert(
                 id,
-                Worker::new(
-                    id,
-                    Arc::clone(&task_receiver),
-                    None,
-                    task_status_sender.clone(),
-                ),
+                Worker::new(id, task_receiver.clone(), None, task_status_sender.clone()),
             );
         }
 
@@ -316,7 +310,7 @@ impl ThreadPool {
         F: FnOnce() -> T + Send + UnwindSafe + 'static,
         T: Send + 'static,
     {
-        let (result_sender, result_receiver) = mpsc::channel();
+        let (result_sender, result_receiver) = crossbeam_channel::unbounded();
 
         let job = move || {
             if let Err(_) = result_sender.send(std::panic::catch_unwind(f)) {
@@ -371,7 +365,7 @@ impl ThreadPool {
                 id,
                 Worker::new(
                     id,
-                    Arc::clone(&self.task_receiver),
+                    self.task_receiver.clone(),
                     self.keep_alive_time.clone(),
                     task_status_sender,
                 ),
@@ -427,27 +421,14 @@ pub(super) enum WorkerStatus {
 impl Worker {
     fn run_in_thread(
         id: usize,
-        task_receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
+        task_receiver: crossbeam_channel::Receiver<Job>,
         wait_time_out: Option<Duration>,
-        task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
+        task_status_sender: crossbeam_channel::Sender<(usize, WorkerStatus)>,
     ) {
         loop {
-            let receiver = match task_receiver.lock() {
-                // Won't do job inside. Doing job here may cause the lock release after the job done.
-                Ok(receiver) => receiver,
-                Err(err) => {
-                    log::debug!(
-                        "Worker[#{:?}] Cannot lock receiver! close this thread. err {:?}",
-                        id,
-                        err
-                    );
-                    break;
-                }
-            };
-
             let job = if let Some(timeout) = wait_time_out {
                 log::debug!("Worker[#{:?}] will wait for time {:?}", id, timeout);
-                match receiver.recv_timeout(timeout) {
+                match task_receiver.recv_timeout(timeout) {
                     Ok(job) => job,
                     Err(_) => {
                         log::debug!(
@@ -458,7 +439,7 @@ impl Worker {
                     }
                 }
             } else {
-                match receiver.recv() {
+                match task_receiver.recv() {
                     Ok(job) => job,
                     Err(_) => {
                         log::debug!("Worker[#{:?}] Chanel sender may disconnect, receive job, error. exit this loop .", id);
@@ -488,9 +469,9 @@ impl Worker {
 
     fn new(
         id: usize,
-        task_receiver: Arc<Mutex<mpsc::Receiver<Job>>>,
+        task_receiver: crossbeam_channel::Receiver<Job>,
         wait_time_out: Option<Duration>,
-        task_status_sender: mpsc::Sender<(usize, WorkerStatus)>,
+        task_status_sender: crossbeam_channel::Sender<(usize, WorkerStatus)>,
     ) -> Worker {
         let thread = thread::Builder::new()
             .name("thread-pool-worker-".to_string() + id.to_string().as_str())

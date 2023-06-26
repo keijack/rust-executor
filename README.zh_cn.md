@@ -8,8 +8,8 @@
 
 ```rust
 let pool = threadpool_executor::ThreadPool::new(1);
-let expectation = pool.execute(|| {"hello, thread pool!"}).unwrap();
-assert(expectation.get_result().unwrap(), "hello, thread pool!");
+let mut expectation = pool.execute(|| {"hello, thread pool!"}).unwrap();
+assert_eq!(expectation.get_result().unwrap(), "hello, thread pool!");
 ```
 
 等待结果时可以选择超时时间。
@@ -17,9 +17,9 @@ assert(expectation.get_result().unwrap(), "hello, thread pool!");
 ```rust
 let pool = threadpool_executor::ThreadPool::new(1);
 let r = pool.execute(|| {
-    std::thread::sleep(Duration::from_secs(10));
+    std::thread::sleep(std::time::Duration::from_secs(10));
 });
-let res = r.unwrap().get_result_timeout(Duration::from_secs(3));
+let res = r.unwrap().get_result_timeout(std::time::Duration::from_secs(3));
 assert!(res.is_err());
 if let Err(err) = res {
     matches!(err.kind(), threadpool_executor::error::ErrorKind::TimeOut);
@@ -33,7 +33,7 @@ if let Err(err) = res {
 let pool = threadpool_executor::threadpool::Builder::new()
         .core_pool_size(1)
         .maximum_pool_size(3)
-        .keep_alive_time(Duration::from_secs(300))
+        .keep_alive_time(std::time::Duration::from_secs(300))
         .exeed_limit_policy(threadpool_executor::threadpool::ExceedLimitPolicy::Wait)
         .build();
 ```
