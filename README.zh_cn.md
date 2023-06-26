@@ -52,3 +52,13 @@ if let Err(err) = res {
 }
 ```
 
+在任务等待的过程当中，你可以取消任务的执行。如果任务以及开始执行的话，任务则不可被取消。
+
+```rust
+let pool = threadpool_executor::ThreadPool::new(1);
+pool.execute(|| {
+    std::thread::sleep(std::time::Duration::from_secs(3));
+}).unwrap();
+let mut exp = pool.execute(|| {}).unwrap();
+exp.cancel();
+```

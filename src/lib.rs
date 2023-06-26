@@ -52,6 +52,17 @@
 //!     matches!(err.kind(), threadpool_executor::error::ErrorKind::Panic);
 //! }
 //! ```
+//! 
+//! You can cancel the task when it's waiting in line. The task cannot be cancelled when it's started running. 
+//! 
+//! ```
+//! let pool = threadpool_executor::ThreadPool::new(1);
+//! pool.execute(|| {
+//!     std::thread::sleep(std::time::Duration::from_secs(3));
+//! }).unwrap();
+//! let mut exp = pool.execute(|| {}).unwrap();
+//! exp.cancel();
+//! ```
 
 use crossbeam_channel::{Receiver, Sender};
 use std::{

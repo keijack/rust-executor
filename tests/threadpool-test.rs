@@ -116,7 +116,7 @@ fn test_cancel() {
     let a1 = a.clone();
     let mut r1 = pool
         .execute(move || {
-            std::thread::sleep(Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(3));
             a1.store(false, std::sync::atomic::Ordering::Relaxed);
         })
         .unwrap();
