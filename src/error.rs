@@ -9,6 +9,8 @@ pub enum ErrorKind {
     ResultAlreadyTaken,
     TimeOut,
     TaskRejected,
+    TaskCancelled,
+    TaskRunning,
     Panic,
 }
 
@@ -25,6 +27,8 @@ impl Display for ErrorKind {
             ErrorKind::PoolEnded => "PoolEnded",
             ErrorKind::ResultAlreadyTaken => "ResultAlreadyTaken",
             ErrorKind::TaskRejected => "TaskRejected",
+            ErrorKind::TaskCancelled => "TaskCancelled",
+            ErrorKind::TaskRunning => "TaskStarted",
             ErrorKind::TimeOut => "TimeOUt",
             ErrorKind::Panic => "Panic",
         };

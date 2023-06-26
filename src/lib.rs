@@ -57,7 +57,10 @@ use crossbeam_channel::{Receiver, Sender};
 use std::{
     any::Any,
     collections::HashMap,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize},
+        Arc, Mutex,
+    },
     thread,
     time::Duration,
 };
@@ -66,6 +69,9 @@ pub mod error;
 pub mod threadpool;
 
 pub struct Expectation<T> {
+    task_cancelled: Arc<AtomicBool>,
+    task_started: Arc<AtomicBool>,
+    task_done: Arc<AtomicBool>,
     result_receiver: Option<Receiver<Result<T, Box<dyn Any + Send>>>>,
 }
 

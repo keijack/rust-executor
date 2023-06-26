@@ -312,10 +312,23 @@ impl ThreadPool {
     {
         let (result_sender, result_receiver) = crossbeam_channel::unbounded();
 
+        let task_cancelled = Arc::new(AtomicBool::new(false));
+        let task_started = Arc::new(AtomicBool::new(false));
+        let task_done = Arc::new(AtomicBool::new(false));
+
+        let job_cancelled = task_cancelled.clone();
+        let job_started = task_started.clone();
+        let job_done = task_done.clone();
         let job = move || {
+            if job_cancelled.load(Ordering::Relaxed) {
+                log::debug!("Job is cancelled!");
+                return;
+            }
+            job_started.store(true, Ordering::Relaxed);
             if let Err(_) = result_sender.send(std::panic::catch_unwind(f)) {
                 log::debug!("Cannot send res to receiver, receiver may close. ");
             }
+            job_done.store(true, Ordering::Relaxed);
         };
 
         let worker_count = self.worker_count.load(Ordering::Relaxed);
@@ -343,6 +356,9 @@ impl ThreadPool {
                     log::debug!("Run the task at the caller's thread. run now.");
                     job();
                     return Ok(Expectation {
+                        task_cancelled,
+                        task_started,
+                        task_done,
                         result_receiver: Some(result_receiver),
                     });
                 }
@@ -375,6 +391,9 @@ impl ThreadPool {
 
         if let Ok(_) = self.task_sender.as_ref().unwrap().send(Box::new(job)) {
             Ok(Expectation {
+                task_cancelled,
+                task_started,
+                task_done,
                 result_receiver: Some(result_receiver),
             })
         } else {
@@ -504,6 +523,62 @@ impl<T> Expectation<T>
 where
     T: Send + 'static,
 {
+    ///
+    /// Show whether the task is cancelled.
+    ///
+    pub fn is_cancelled(&self) -> bool {
+        self.task_cancelled.load(Ordering::Relaxed)
+    }
+
+    ///
+    /// Show whether the task is done.
+    ///
+    pub fn is_done(&self) -> bool {
+        self.task_done.load(Ordering::Relaxed)
+    }
+
+    ///
+    /// Cancel the task when the task is still waiting in line.
+    ///
+    /// If the task is started running, `Err` will be return.
+    ///
+    /// If the task is already cancel, `Err` will be return.
+    ///
+    pub fn cancel(&mut self) -> Result<(), ExecutorError> {
+        if self.task_done.load(Ordering::Relaxed) {
+            return Err(ExecutorError::new(
+                ErrorKind::TaskRunning,
+                "Task has been done. ".to_string(),
+            ));
+        }
+
+        if self.task_started.load(Ordering::Relaxed) {
+            return Err(ExecutorError::new(
+                ErrorKind::TaskRunning,
+                "Task is already running, cannot stop now. ".to_string(),
+            ));
+        }
+
+        if self.task_cancelled.load(Ordering::Relaxed) {
+            return Err(ExecutorError::new(
+                ErrorKind::TaskCancelled,
+                "Task has been cancelled. ".to_string(),
+            ));
+        }
+        self.task_cancelled.store(true, Ordering::Relaxed);
+
+        match self.result_receiver.take() {
+            Some(receiver) => drop(receiver),
+            None => {
+                return Err(ExecutorError::new(
+                    ErrorKind::ResultAlreadyTaken,
+                    "Result is already taken.".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// This method returns a `Result` which will return the return value of your
     /// closure when `Ok`, and `Err` will be returned when your closure `panic`.
     ///
@@ -530,6 +605,12 @@ where
     /// ```
     ///
     pub fn get_result(&mut self) -> Result<T, ExecutorError> {
+        if self.task_cancelled.load(Ordering::Relaxed) {
+            return Err(ExecutorError::new(
+                ErrorKind::TaskCancelled,
+                "Task has been cancelled. ".to_string(),
+            ));
+        }
         if let Some(receiver) = self.result_receiver.take() {
             match receiver.recv() {
                 Ok(res) => match res {
@@ -542,7 +623,7 @@ where
                 },
                 Err(_) => Err(ExecutorError::new(
                     ErrorKind::PoolEnded,
-                    "Cannot send message to worker thread, This threadpool is already dropped."
+                    "Cannot receive message from the  worker thread, This threadpool is already dropped."
                         .to_string(),
                 )),
             }
@@ -583,6 +664,12 @@ where
     /// ```
     ///
     pub fn get_result_timeout(&mut self, timeout: Duration) -> Result<T, ExecutorError> {
+        if self.task_cancelled.load(Ordering::Relaxed) {
+            return Err(ExecutorError::new(
+                ErrorKind::TaskCancelled,
+                "Task has been cancelled. ".to_string(),
+            ));
+        }
         if let Some(receiver) = self.result_receiver.take() {
             match receiver.recv_timeout(timeout) {
                 Ok(res) => match res {

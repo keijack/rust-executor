@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, time::Duration};
+use std::{
+    collections::VecDeque,
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
+};
 
 mod common;
 
@@ -101,4 +105,40 @@ fn test_reject() {
             threadpool_executor::error::ErrorKind::TaskRejected
         );
     }
+}
+
+#[test]
+fn test_cancel() {
+    common::setup_log();
+    let pool = threadpool_executor::ThreadPool::new(1);
+
+    let a = Arc::new(AtomicBool::new(true));
+    let a1 = a.clone();
+    let mut r1 = pool
+        .execute(move || {
+            std::thread::sleep(Duration::from_secs(3));
+            a1.store(false, std::sync::atomic::Ordering::Relaxed);
+        })
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(1));
+    let r1c = r1.cancel();
+    assert!(r1c.is_err());
+    if let Err(err) = r1c {
+        matches!(
+            err.kind(),
+            threadpool_executor::error::ErrorKind::TaskRunning
+        );
+    }
+
+    let b = Arc::new(AtomicBool::new(true));
+    let b1 = b.clone();
+    let mut r2 = pool
+        .execute(move || b1.store(false, std::sync::atomic::Ordering::Relaxed))
+        .unwrap();
+    r2.cancel().unwrap();
+    std::thread::sleep(Duration::from_secs(5));
+    assert!(r2.is_cancelled());
+    assert!(b.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(r1.is_done());
+    assert!(!a.load(std::sync::atomic::Ordering::Relaxed));
 }

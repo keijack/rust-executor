@@ -1,6 +1,6 @@
 [package]
 name = "threadpool-executor"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 authors = ["Keijack Wu"]
 description = "A threadpool executor. "
@@ -8,7 +8,8 @@ readme = "README.md"
 homepage = "https://github.com/keijack/rust-executor"
 repository = "https://github.com/keijack/rust-executor"
 license = "Apache-2.0"
-keywords = ["threadpool", "thread", "pool", "threading", "parallelism"]
+categories = ["concurrency"]
+keywords = ["threadpool", "thread", "pool", "concurrency", "parallelism"]
 
 [dependencies]
 crossbeam-channel = "^0.5"
