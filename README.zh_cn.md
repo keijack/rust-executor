@@ -1,5 +1,8 @@
 # Rust Executor
 
+![crate.io-version](https://img.shields.io/crates/v/threadpool-executor)
+![docs.rs-build](https://img.shields.io/docsrs/threadpool-executor)
+
 这是一个简单的线程池 rust 实现，支持设定核心线程数（线程会一直运行到线程池被 drop），最大线程数（可以配置非核心线程的存活时间），任务超出最大线程数时的执行策略。同时，你可以等待线程池的执行结果。
 
 ## 使用方法
