@@ -365,27 +365,28 @@ impl ThreadPool {
             };
         }
         if working_count >= worker_count && working_count < self.max_size {
-            let mut workers = self.workers.lock().unwrap();
-            let id = self.current_id.fetch_add(1, Ordering::Relaxed);
-            let task_status_sender = match self.worker_status_sender.clone() {
-                Some(sender) => sender,
-                None => {
-                    return Err(ExecutorError::new(
-                        ErrorKind::PoolEnded,
-                        "This threadpool is already dropped.".to_string(),
-                    ));
-                }
-            };
-            self.worker_count.fetch_add(1, Ordering::Relaxed);
-            workers.insert(
-                id,
-                Worker::new(
+            if let Ok(mut workers) = self.workers.lock() {
+                let id = self.current_id.fetch_add(1, Ordering::Relaxed);
+                let task_status_sender = match self.worker_status_sender.clone() {
+                    Some(sender) => sender,
+                    None => {
+                        return Err(ExecutorError::new(
+                            ErrorKind::PoolEnded,
+                            "This threadpool is already dropped.".to_string(),
+                        ));
+                    }
+                };
+                self.worker_count.fetch_add(1, Ordering::Relaxed);
+                workers.insert(
                     id,
-                    self.task_receiver.clone(),
-                    self.keep_alive_time.clone(),
-                    task_status_sender,
-                ),
-            );
+                    Worker::new(
+                        id,
+                        self.task_receiver.clone(),
+                        self.keep_alive_time.clone(),
+                        task_status_sender,
+                    ),
+                );
+            }
         }
         self.working_count.fetch_add(1, Ordering::Relaxed);
 
