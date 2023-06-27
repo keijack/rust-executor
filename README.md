@@ -1,7 +1,8 @@
 # Rust Threadpool Executor
 
-![crate.io-version](https://img.shields.io/crates/v/threadpool-executor)
-![docs.rs-build](https://img.shields.io/docsrs/threadpool-executor)
+[![crate.io-version](https://img.shields.io/crates/v/threadpool-executor)](https://crates.io/crates/threadpool-executor/)
+[![crate.io-download](https://img.shields.io/crates/d/threadpool-executor)](https://crates.io/crates/threadpool-executor/)
+[![docs.rs-build](https://img.shields.io/docsrs/threadpool-executor)](https://docs.rs/threadpool-executor/latest/threadpool_executor/)
 
 A simple thread pool for running jobs on the worker threads. You can specify the core workers which will live as long as the thread pool , maximum workers which will live with a given keep alive time, and the policy when the jobs submited exceed the maximum size of the workers. 
 
